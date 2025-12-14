@@ -2,6 +2,33 @@
 
 A real-time polling application built with React, TypeScript, and Socket.IO for interactive classroom sessions.
 
+
+## Screenshots
+
+### Application Interface
+
+![Screenshot 1](./images/img1.png)
+![Screenshot 2](./images/img2.png)
+![Screenshot 3](./images/img3.png)
+![Screenshot 4](./images/img4.png)
+![Screenshot 5](./images/img5.png)
+![Screenshot 6](./images/img6.png)
+![Screenshot 7](./images/img7.png)
+![Screenshot 8](./images/img8.png)
+![Screenshot 9](./images/img9.png)
+![Screenshot 10](./images/img10.png)
+![Screenshot 11](./images/img11.png)
+![Screenshot 12](./images/img12.png)
+![Screenshot 13](./images/img13.png)
+![Screenshot 14](./images/img14.png)
+![Screenshot 15](./images/img15.png)
+![Screenshot 16](./images/img16.png)
+![Screenshot 17](./images/img17.png)
+![Screenshot 18](./images/img18.png)
+![Screenshot 19](./images/img19.png)
+![Screenshot 20](./images/img20.png)
+![Screenshot 21](./images/img21.png)
+
 ## Features
 
 ### For Teachers
@@ -93,32 +120,6 @@ intervue-poll-system/
 ├── shared/                # Shared types and schemas
 └── package.json           # Dependencies and scripts
 ```
-
-## Screenshots
-
-### Application Interface
-
-![Screenshot 1](./images/img1.png)
-![Screenshot 2](./images/img2.png)
-![Screenshot 3](./images/img3.png)
-![Screenshot 4](./images/img4.png)
-![Screenshot 5](./images/img5.png)
-![Screenshot 6](./images/img6.png)
-![Screenshot 7](./images/img7.png)
-![Screenshot 8](./images/img8.png)
-![Screenshot 9](./images/img9.png)
-![Screenshot 10](./images/img10.png)
-![Screenshot 11](./images/img11.png)
-![Screenshot 12](./images/img12.png)
-![Screenshot 13](./images/img13.png)
-![Screenshot 14](./images/img14.png)
-![Screenshot 15](./images/img15.png)
-![Screenshot 16](./images/img16.png)
-![Screenshot 17](./images/img17.png)
-![Screenshot 18](./images/img18.png)
-![Screenshot 19](./images/img19.png)
-![Screenshot 20](./images/img20.png)
-![Screenshot 21](./images/img21.png)
 
 ## Key Features Explained
 
