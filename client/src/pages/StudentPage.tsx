@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ChatSystem } from "@/components/ChatSystem";
 import { 
   Clock, 
   BarChart3, 
@@ -12,7 +13,9 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
-  StarIcon
+  StarIcon,
+  MessageCircle,
+  UserMinus
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -26,6 +29,8 @@ export function StudentPage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [showChat, setShowChat] = useState(false);
+  const [isChatVisible, setIsChatVisible] = useState(false);
 
   useEffect(() => {
     if (socket.student) {
@@ -58,6 +63,13 @@ export function StudentPage() {
   }, [socket.activeQuestion]);
 
   useEffect(() => {
+    if (isChatVisible) {
+      socket.markMessagesAsRead();
+    }
+    socket.setChatVisible(isChatVisible);
+  }, [isChatVisible, socket.markMessagesAsRead, socket.setChatVisible]);
+
+  useEffect(() => {
     if (!socket.activeQuestion) {
       setSelectedOption(null);
     }
@@ -85,11 +97,17 @@ export function StudentPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
         <Card className="w-full max-w-md text-center">
           <CardContent className="pt-6">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">You have been removed</h2>
-            <p className="text-slate-500 mb-6">The teacher has removed you from this session.</p>
-            <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-              Go Home
+            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
+              <UserMinus className="w-10 h-10 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-red-800 mb-2">You've been Kicked out!</h2>
+            <p className="text-slate-600 mb-8">The teacher has removed you from this session.</p>
+            <Button 
+              onClick={() => setLocation("/")} 
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3"
+              data-testid="button-go-home"
+            >
+              Go to Home Screen
             </Button>
           </CardContent>
         </Card>
@@ -99,49 +117,40 @@ export function StudentPage() {
 
   if (!hasJoined) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <Badge className="w-fit mx-auto mb-4 flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600">
-              <StarIcon className="w-4 h-4 fill-white text-white" />
-              <span className="font-semibold text-white">Intervue Poll</span>
-            </Badge>
-            <CardTitle className="text-2xl">Join the Poll</CardTitle>
-            <p className="text-slate-500">Enter your name to participate</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <User className="w-4 h-4" />
-                Your Name
-              </label>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
+        <div className="text-center max-w-2xl">
+          <Badge className="w-fit mx-auto mb-8 flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-blue-600">
+            <StarIcon className="w-5 h-5 fill-white text-white" />
+            <span className="font-bold text-white text-lg">Intervue Poll</span>
+          </Badge>
+          <h1 className="text-6xl font-bold text-gray-900 mb-8">Let's Get Started</h1>
+          <p className="text-xl text-gray-600 mb-12 leading-relaxed">
+            If you're a student, you'll be able to <span className="font-bold text-gray-800">submit your answers</span>, participate in live
+            polls, and see how your responses compare with your classmates
+          </p>
+          <div className="w-full max-w-md mx-auto space-y-8">
+            <div className="text-left">
+              <label htmlFor="name-input" className="text-gray-700 font-semibold text-xl mb-3 block">Enter your Name</label>
               <Input
-                placeholder="Enter your name..."
+                id="name-input"
+                placeholder="Rahul Bajaj"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                className="h-16 text-xl px-4 rounded-lg border-2 border-gray-300 focus:border-purple-500 transition-colors"
                 data-testid="input-student-name"
               />
             </div>
             <Button 
               onClick={handleJoin}
               disabled={!name.trim()}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600"
+              className="w-full h-16 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold text-xl transition-all duration-200 shadow-xl hover:shadow-2xl rounded-lg"
               data-testid="button-join"
             >
-              Join Poll
+              Continue
             </Button>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => setLocation("/")}
-              data-testid="button-back-home"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Home
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -278,15 +287,18 @@ export function StudentPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Clock className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Waiting for Question</h2>
-              <p className="text-slate-500">
-                The teacher hasn't asked a question yet. Please wait...
-              </p>
-            </CardContent>
-          </Card>
+          <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 relative">
+            <div className="text-center">
+              <Badge className="w-fit mx-auto mb-8 flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-blue-600">
+                <StarIcon className="w-5 h-5 fill-white text-white" />
+                <span className="font-bold text-white text-lg">Intervue Poll</span>
+              </Badge>
+              <div className="flex justify-center mb-8">
+                <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Wait for the teacher to ask questions..</h2>
+            </div>
+          </div>
         )}
       </main>
 
@@ -295,6 +307,32 @@ export function StudentPage() {
           {socket.error}
         </div>
       )}
+
+      {/* Floating Chat Window */}
+      {showChat && (
+        <div className="fixed top-0 right-0 h-full w-1/3 z-50 shadow-2xl bg-white">
+          <ChatSystem 
+            socket={socket} 
+            teacherName={socket.student?.name || "Student"} 
+            onVisibleChange={setIsChatVisible}
+            role="student"
+          />
+        </div>
+      )}
+
+      {/* Floating Chat Button */}
+      <Button
+        onClick={() => setShowChat(!showChat)}
+        className="fixed bottom-4 right-4 w-14 h-14 rounded-full shadow-lg z-50 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+        size="icon"
+      >
+        <MessageCircle className="w-6 h-6 text-white" />
+        {socket.unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+            {socket.unreadCount}
+          </span>
+        )}
+      </Button>
     </div>
   );
 }

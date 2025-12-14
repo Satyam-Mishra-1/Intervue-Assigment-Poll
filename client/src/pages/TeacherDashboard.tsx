@@ -2,9 +2,14 @@ import { useState, useEffect } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChatSystem } from "@/components/ChatSystem";
+import { PollHistoryView } from "@/components/PollHistoryView";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Plus, 
   Trash2, 
@@ -14,7 +19,8 @@ import {
   History,
   ArrowLeft,
   Send,
-  UserMinus
+  UserMinus,
+  MessageCircle
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -26,12 +32,29 @@ export function TeacherDashboard() {
   const [options, setOptions] = useState(["", ""]);
   const [timeLimit, setTimeLimit] = useState(60);
   const [showPastResults, setShowPastResults] = useState(false);
+  const [correctAnswer, setCorrectAnswer] = useState<string>("0");
+  const [yesNoAnswers, setYesNoAnswers] = useState<{ [key: string]: string }>({});
+  const [showChat, setShowChat] = useState(false);
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  const [showPollHistory, setShowPollHistory] = useState(false);
 
   useEffect(() => {
     if (showPastResults) {
+      console.log("Requesting past results...");
       socket.getPastResults();
     }
   }, [showPastResults, socket.getPastResults]);
+
+  useEffect(() => {
+    console.log("Past results updated:", socket.pastResults);
+  }, [socket.pastResults]);
+
+  useEffect(() => {
+    if (isChatVisible) {
+      socket.markMessagesAsRead();
+    }
+    socket.setChatVisible(isChatVisible);
+  }, [isChatVisible, socket.markMessagesAsRead, socket.setChatVisible]);
 
   const addOption = () => {
     if (options.length < 6) {
@@ -54,15 +77,37 @@ export function TeacherDashboard() {
   const handleAskQuestion = () => {
     const validOptions = options.filter(o => o.trim() !== "");
     if (questionText.trim() && validOptions.length >= 2) {
-      socket.askQuestion(questionText, validOptions, timeLimit);
+      socket.askQuestion(questionText, validOptions, timeLimit, parseInt(correctAnswer));
       setQuestionText("");
       setOptions(["", ""]);
+      setCorrectAnswer("0");
+      setYesNoAnswers({});
     }
+  };
+
+  const handleYesNoChange = (index: number, value: string) => {
+    setYesNoAnswers(prev => ({
+      ...prev,
+      [index.toString()]: value
+    }));
   };
 
   const getResultsPercentage = (votes: number, total: number) => {
     if (total === 0) return 0;
     return Math.round((votes / total) * 100);
+  };
+
+  const handleEndSession = () => {
+    const sessionTitle = prompt("Enter a title for this session:");
+    if (sessionTitle && sessionTitle.trim()) {
+      console.log("Ending session with title:", sessionTitle.trim());
+      socket.endSession(sessionTitle.trim());
+    }
+  };
+
+  const handleJoinSession = () => {
+    console.log("Creating join session with sample data...");
+    socket.createTestSession();
   };
 
   return (
@@ -84,10 +129,34 @@ export function TeacherDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="flex items-center gap-1.5 py-1">
+            <Badge className="flex items-center gap-1.5 py-1 bg-blue-100 text-blue-800 border-blue-200">
               <Users className="w-3.5 h-3.5" />
               <span data-testid="text-student-count">{socket.students.length} Students</span>
             </Badge>
+            <Button
+              onClick={handleJoinSession}
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white"
+            >
+              <History className="w-4 h-4" />
+              Join Session Now
+            </Button>
+            <Button
+              onClick={handleEndSession}
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <History className="w-4 h-4" />
+              End Session
+            </Button>
+            <Button
+              onClick={() => {
+                setShowPollHistory(true);
+                socket.getPastResults();
+              }}
+              className="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white"
+            >
+              <BarChart3 className="w-4 h-4" />
+              View History
+            </Button>
             <div className={`w-2 h-2 rounded-full ${socket.connected ? "bg-green-500" : "bg-red-500"}`} />
           </div>
         </div>
@@ -125,25 +194,43 @@ export function TeacherDashboard() {
                   data-testid="input-question"
                 />
                 
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-slate-700">Options</p>
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-lg font-semibold text-slate-800">Edit Options</p>
+                  <p className="text-lg font-semibold text-slate-800">Is it Correct?</p>
+                </div>
+                <div className="space-y-4">
                   {options.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs flex items-center justify-center font-medium">
-                        {String.fromCharCode(65 + index)}
+                    <div key={index} className="flex items-center gap-4">
+                      <span className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold text-sm">
+                        {index + 1}
                       </span>
-                      <Input
-                        placeholder={`Option ${index + 1}`}
-                        value={option}
-                        onChange={(e) => updateOption(index, e.target.value)}
-                        data-testid={`input-option-${index}`}
-                      />
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Type option here"
+                          value={option}
+                          onChange={(e) => updateOption(index, e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <RadioGroup
+                        value={yesNoAnswers[index.toString()] || ""}
+                        onValueChange={(value) => handleYesNoChange(index, value)}
+                        className="flex items-center space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="yes" id={`yes-${index}`} />
+                          <Label htmlFor={`yes-${index}`}>Yes</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="no" id={`no-${index}`} />
+                          <Label htmlFor={`no-${index}`}>No</Label>
+                        </div>
+                      </RadioGroup>
                       {options.length > 2 && (
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => removeOption(index)}
-                          data-testid={`button-remove-option-${index}`}
                         >
                           <Trash2 className="w-4 h-4 text-slate-400" />
                         </Button>
@@ -280,7 +367,7 @@ export function TeacherDashboard() {
                     No students have joined yet
                   </p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-2 max-h-48 overflow-y-auto">
                     {socket.students.map((student) => (
                       <li 
                         key={student.id} 
@@ -295,11 +382,13 @@ export function TeacherDashboard() {
                         </div>
                         <Button
                           variant="ghost"
-                          size="icon"
+                          size="sm"
                           onClick={() => socket.removeStudent(student.id)}
+                          className="text-red-800 hover:text-red-900 hover:bg-red-100 flex flex-col items-center gap-1 px-2 py-1"
                           data-testid={`button-remove-student-${student.id}`}
                         >
-                          <UserMinus className="w-4 h-4 text-slate-400" />
+                          <UserMinus className="w-4 h-4" />
+                          <span className="text-xs">Kick out</span>
                         </Button>
                       </li>
                     ))}
@@ -326,24 +415,31 @@ export function TeacherDashboard() {
                     </p>
                   ) : (
                     <div className="space-y-4">
-                      {socket.pastResults.map((result, idx) => (
-                        <div 
-                          key={result.questionId} 
-                          className="p-3 rounded-lg bg-slate-50 space-y-2"
-                          data-testid={`past-result-${idx}`}
-                        >
-                          <p className="text-sm font-medium">{result.questionText}</p>
-                          <div className="space-y-1">
-                            {result.options.map((option, i) => (
-                              <div key={i} className="flex items-center justify-between text-xs">
-                                <span>{option}</span>
-                                <span>{result.votes[i]} votes</span>
-                              </div>
-                            ))}
+                      {socket.pastResults.map((session, sessionIdx) => (
+                        <div key={session.id} className="space-y-3">
+                          <div className="text-sm font-medium text-slate-700">
+                            {session.title} - {new Date(session.startedAt).toLocaleDateString()}
                           </div>
-                          <p className="text-xs text-slate-500">
-                            Total: {result.totalVotes} responses
-                          </p>
+                          {session.questions.map((question, questionIdx) => (
+                            <div 
+                              key={question.id} 
+                              className="p-3 rounded-lg bg-slate-50 space-y-2"
+                              data-testid={`past-result-${sessionIdx}-${questionIdx}`}
+                            >
+                              <p className="text-sm font-medium">{question.text}</p>
+                              <div className="space-y-1">
+                                {question.results.options.map((option: string, i: number) => (
+                                  <div key={i} className="flex items-center justify-between text-xs">
+                                    <span>{option}</span>
+                                    <span>{question.results.votes[i]} votes</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                Total: {question.results.totalVotes} responses
+                              </p>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
@@ -359,6 +455,40 @@ export function TeacherDashboard() {
         <div className="fixed bottom-4 right-4 bg-red-100 border border-red-200 text-red-800 px-4 py-2 rounded-lg shadow-lg">
           {socket.error}
         </div>
+      )}
+
+      {/* Floating Chat Window */}
+      {showChat && (
+        <div className="fixed top-0 right-0 h-full w-1/3 z-50 shadow-2xl bg-white">
+          <ChatSystem 
+            socket={socket} 
+            teacherName="Teacher" 
+            onVisibleChange={setIsChatVisible}
+            role="teacher"
+          />
+        </div>
+      )}
+
+      {/* Floating Chat Button */}
+      <Button
+        onClick={() => setShowChat(!showChat)}
+        className="fixed bottom-4 right-4 w-14 h-14 rounded-full shadow-lg z-50 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+        size="icon"
+      >
+        <MessageCircle className="w-6 h-6 text-white" />
+        {socket.unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+            {socket.unreadCount}
+          </span>
+        )}
+      </Button>
+
+      {/* Poll History View */}
+      {showPollHistory && (
+        <PollHistoryView
+          pastSessions={socket.pastResults}
+          onClose={() => setShowPollHistory(false)}
+        />
       )}
     </div>
   );

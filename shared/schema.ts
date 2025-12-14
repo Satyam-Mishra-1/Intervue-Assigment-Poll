@@ -1,8 +1,17 @@
 import { z } from "zod";
 
+export interface Teacher {
+  id: string;
+  name: string;
+  email?: string;
+  createdAt: Date;
+  lastActiveAt: Date;
+}
+
 export interface Poll {
   id: string;
   title: string;
+  teacherId: string;
   createdAt: Date;
   isActive: boolean;
 }
@@ -12,6 +21,7 @@ export interface Question {
   pollId: string;
   text: string;
   options: string[];
+  correctAnswer: number;
   timeLimit: number;
   createdAt: Date;
   isActive: boolean;
@@ -44,6 +54,22 @@ export interface PollResults {
   responses: { studentName: string; selectedOption: number }[];
 }
 
+export interface PastSession {
+  id: string;
+  teacherId: string;
+  title: string;
+  startedAt: Date;
+  endedAt: Date;
+  questions: {
+    id: string;
+    text: string;
+    options: string[];
+    correctAnswer: number;
+    timeLimit: number;
+    results: PollResults;
+  }[];
+}
+
 export const createPollSchema = z.object({
   title: z.string().min(1, "Poll title is required"),
 });
@@ -52,6 +78,7 @@ export const createQuestionSchema = z.object({
   pollId: z.string(),
   text: z.string().min(1, "Question text is required"),
   options: z.array(z.string().min(1)).min(2, "At least 2 options required"),
+  correctAnswer: z.number().min(0),
   timeLimit: z.number().min(10).max(300).default(60),
 });
 

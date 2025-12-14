@@ -1,7 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import { storage } from "./storage";
-import type { Question, PollResults, Student } from "@shared/schema";
+import type { Question, PollResults, Student, Teacher, PastSession } from "@shared/schema";
 
 let io: Server;
 let questionTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -19,6 +19,14 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     socket.on("teacher:join", () => {
       socket.join("teachers");
+      
+      // Create or get teacher record
+      const teacher = storage.createOrUpdateTeacher("Teacher");
+      socket.data.teacherId = teacher.id;
+      
+      // Start a new session for this teacher
+      storage.startTeacherSession(teacher.id);
+      
       const activeQuestion = storage.getActiveQuestion();
       const students = storage.getOnlineStudents();
       const canAskQuestion = storage.canAskNewQuestion();
@@ -56,11 +64,23 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     socket.on("teacher:createPoll", (data: { title: string }) => {
-      const poll = storage.createPoll(data.title);
+      const teacherId = socket.data.teacherId;
+      if (!teacherId) {
+        socket.emit("error", { message: "Teacher not authenticated" });
+        return;
+      }
+      
+      const poll = storage.createPoll(data.title, teacherId);
       socket.emit("poll:created", poll);
     });
 
-    socket.on("teacher:askQuestion", (data: { text: string; options: string[]; timeLimit: number }) => {
+    socket.on("teacher:askQuestion", (data: { text: string; options: string[]; timeLimit: number; correctAnswer?: number }) => {
+      const teacherId = socket.data.teacherId;
+      if (!teacherId) {
+        socket.emit("error", { message: "Teacher not authenticated" });
+        return;
+      }
+      
       if (!storage.canAskNewQuestion()) {
         socket.emit("error", { message: "Cannot ask a new question yet. Wait for all students to answer." });
         return;
@@ -76,13 +96,17 @@ export function setupSocket(httpServer: HttpServer): Server {
         }
       }
 
-      const activePoll = storage.getActivePoll() || storage.createPoll("Live Poll");
+      const activePoll = storage.getActivePoll() || storage.createPoll("Live Poll", teacherId);
       const question = storage.createQuestion(
         activePoll.id,
         data.text,
         data.options,
+        data.correctAnswer || 0,
         data.timeLimit || 60
       );
+
+      // Add question to teacher's current session
+      storage.addQuestionToSession(teacherId, question.id);
 
       io.emit("question:new", {
         question,
@@ -168,8 +192,66 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     socket.on("teacher:getPastResults", () => {
-      const results = storage.getAllPollResults();
+      const teacherId = socket.data.teacherId;
+      if (!teacherId) {
+        socket.emit("error", { message: "Teacher not authenticated" });
+        return;
+      }
+      
+      const results = storage.getPastSessionsByTeacher(teacherId);
+      console.log("Sending past results for teacher", teacherId, ":", results);
       socket.emit("pastResults:update", { results });
+    });
+
+    socket.on("teacher:createTestSession", () => {
+      const teacherId = socket.data.teacherId;
+      if (!teacherId) {
+        socket.emit("error", { message: "Teacher not authenticated" });
+        return;
+      }
+      
+      const testSession = storage.createTestPastSession(teacherId);
+      console.log("Created test session for teacher", teacherId);
+      console.log("Test session data:", testSession);
+      
+      // Also immediately send past results to verify they exist
+      const results = storage.getPastSessionsByTeacher(teacherId);
+      console.log("Past sessions after creation:", results);
+      
+      socket.emit("testSession:created", testSession);
+    });
+
+    socket.on("teacher:endSession", (data: { title: string }) => {
+      const teacherId = socket.data.teacherId;
+      if (!teacherId) {
+        socket.emit("error", { message: "Teacher not authenticated" });
+        return;
+      }
+      
+      console.log("Ending session for teacher:", teacherId, "with title:", data.title);
+      const pastSession = storage.endTeacherSession(teacherId, data.title);
+      console.log("Past session created:", pastSession);
+      if (pastSession) {
+        socket.emit("session:ended", pastSession);
+      } else {
+        console.log("No past session created - possibly no questions in session");
+      }
+    });
+
+    socket.on("chat:message", (data: { text: string }) => {
+      const isTeacher = socket.rooms.has("teachers");
+      const userName = isTeacher ? "Teacher" : (socket.data.studentName || "Student");
+      
+      const messageData = {
+        id: Date.now().toString(),
+        user: userName,
+        text: data.text,
+        timestamp: new Date(),
+        isTeacher: isTeacher
+      };
+      
+      // Broadcast message to all connected clients (teacher and students)
+      io.emit("chat:message", messageData);
     });
 
     socket.on("disconnect", () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import type { Question, PollResults, Student } from "@shared/schema";
+import type { Question, PollResults, Student, PastSession } from "@shared/schema";
 
 interface SocketState {
   connected: boolean;
@@ -10,9 +10,18 @@ interface SocketState {
   canAskQuestion: boolean;
   hasAnswered: boolean;
   student: Student | null;
-  pastResults: PollResults[];
+  pastResults: PastSession[];
   error: string | null;
   kicked: boolean;
+  messages: Array<{
+    id: string;
+    user: string;
+    text: string;
+    timestamp: Date;
+    isTeacher?: boolean;
+  }>;
+  unreadCount: number;
+  isChatVisible: boolean;
 }
 
 export function useSocket(role: "teacher" | "student" | null) {
@@ -28,6 +37,9 @@ export function useSocket(role: "teacher" | "student" | null) {
     pastResults: [],
     error: null,
     kicked: false,
+    messages: [],
+    unreadCount: 0,
+    isChatVisible: false,
   });
 
   useEffect(() => {
@@ -110,10 +122,24 @@ export function useSocket(role: "teacher" | "student" | null) {
     });
 
     socket.on("pastResults:update", (data) => {
+      console.log("Received past results:", data.results);
+      console.log("Past results length:", data.results?.length || 0);
+      console.log("Past results type:", typeof data.results);
+      console.log("Is array?", Array.isArray(data.results));
       setState(s => ({
         ...s,
         pastResults: data.results,
       }));
+    });
+
+    socket.on("session:ended", (data) => {
+      console.log("Session ended successfully:", data);
+    });
+
+    socket.on("testSession:created", (data) => {
+      console.log("Test session created:", data);
+      // Automatically fetch past results after creating test session
+      socketRef.current?.emit("teacher:getPastResults");
     });
 
     socket.on("error", (data) => {
@@ -123,6 +149,29 @@ export function useSocket(role: "teacher" | "student" | null) {
 
     socket.on("kicked", () => {
       setState(s => ({ ...s, kicked: true }));
+    });
+
+    socket.on("chat:message", (data) => {
+      setState(s => {
+        // Don't count own messages as unread
+        const isOwnMessage = (role === "teacher" && data.isTeacher) || 
+                           (role === "student" && data.user === s.student?.name);
+        
+        // Only increment unread count if chat is not visible and message is from others
+        const shouldIncrement = !isOwnMessage && !s.isChatVisible;
+        
+        return {
+          ...s,
+          messages: [...s.messages, {
+            id: data.id,
+            user: data.user,
+            text: data.text,
+            timestamp: new Date(data.timestamp),
+            isTeacher: data.isTeacher,
+          }],
+          unreadCount: shouldIncrement ? s.unreadCount + 1 : s.unreadCount
+        };
+      });
     });
 
     if (role === "teacher") {
@@ -139,8 +188,8 @@ export function useSocket(role: "teacher" | "student" | null) {
     socketRef.current?.emit("student:join", { name });
   }, []);
 
-  const askQuestion = useCallback((text: string, options: string[], timeLimit: number) => {
-    socketRef.current?.emit("teacher:askQuestion", { text, options, timeLimit });
+  const askQuestion = useCallback((text: string, options: string[], timeLimit: number, correctAnswer?: number) => {
+    socketRef.current?.emit("teacher:askQuestion", { text, options, timeLimit, correctAnswer });
   }, []);
 
   const submitAnswer = useCallback((questionId: string, selectedOption: number) => {
@@ -159,6 +208,26 @@ export function useSocket(role: "teacher" | "student" | null) {
     socketRef.current?.emit("teacher:getPastResults");
   }, []);
 
+  const endSession = useCallback((title: string) => {
+    socketRef.current?.emit("teacher:endSession", { title });
+  }, []);
+
+  const createTestSession = useCallback(() => {
+    socketRef.current?.emit("teacher:createTestSession");
+  }, []);
+
+  const sendMessage = useCallback((text: string) => {
+    socketRef.current?.emit("chat:message", { text });
+  }, []);
+
+  const markMessagesAsRead = useCallback(() => {
+    setState(s => ({ ...s, unreadCount: 0 }));
+  }, []);
+
+  const setChatVisible = useCallback((visible: boolean) => {
+    setState(s => ({ ...s, isChatVisible: visible }));
+  }, []);
+
   return {
     ...state,
     joinAsStudent,
@@ -167,5 +236,10 @@ export function useSocket(role: "teacher" | "student" | null) {
     endQuestion,
     removeStudent,
     getPastResults,
+    endSession,
+    createTestSession,
+    sendMessage,
+    markMessagesAsRead,
+    setChatVisible,
   };
 }
