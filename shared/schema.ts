@@ -1,18 +1,70 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export interface Poll {
+  id: string;
+  title: string;
+  createdAt: Date;
+  isActive: boolean;
+}
+
+export interface Question {
+  id: string;
+  pollId: string;
+  text: string;
+  options: string[];
+  timeLimit: number;
+  createdAt: Date;
+  isActive: boolean;
+  endTime: Date | null;
+}
+
+export interface Student {
+  id: string;
+  name: string;
+  joinedAt: Date;
+  isOnline: boolean;
+  socketId: string | null;
+}
+
+export interface Response {
+  id: string;
+  questionId: string;
+  studentId: string;
+  studentName: string;
+  selectedOption: number;
+  answeredAt: Date;
+}
+
+export interface PollResults {
+  questionId: string;
+  questionText: string;
+  options: string[];
+  votes: number[];
+  totalVotes: number;
+  responses: { studentName: string; selectedOption: number }[];
+}
+
+export const createPollSchema = z.object({
+  title: z.string().min(1, "Poll title is required"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const createQuestionSchema = z.object({
+  pollId: z.string(),
+  text: z.string().min(1, "Question text is required"),
+  options: z.array(z.string().min(1)).min(2, "At least 2 options required"),
+  timeLimit: z.number().min(10).max(300).default(60),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const joinStudentSchema = z.object({
+  name: z.string().min(1, "Name is required").max(50),
+});
+
+export const submitAnswerSchema = z.object({
+  questionId: z.string(),
+  selectedOption: z.number().min(0),
+});
+
+export type CreatePoll = z.infer<typeof createPollSchema>;
+export type CreateQuestion = z.infer<typeof createQuestionSchema>;
+export type JoinStudent = z.infer<typeof joinStudentSchema>;
+export type SubmitAnswer = z.infer<typeof submitAnswerSchema>;
