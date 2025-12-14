@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { setupSocket } from "./socket";
 import { storage } from "./storage";
 
+let httpServer: Server | null = null;
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/poll/state", (req, res) => {
     const activeQuestion = storage.getActiveQuestion();
@@ -29,9 +31,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ students });
   });
 
-  const httpServer = createServer(app);
-  
-  setupSocket(httpServer);
+  // Create server only once for Socket.IO
+  if (!httpServer) {
+    httpServer = createServer(app);
+    setupSocket(httpServer);
+  }
 
+  return httpServer;
+}
+
+export function getServer(): Server | null {
   return httpServer;
 }
